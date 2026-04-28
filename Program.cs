@@ -47,6 +47,23 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // Guarantee the table exists even if EnsureCreated skipped it
+    // (happens when the .db file already exists but is empty/incomplete)
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "ParameterLogs" (
+            "Id"            INTEGER PRIMARY KEY AUTOINCREMENT,
+            "Timestamp"     TEXT    NOT NULL,
+            "ParameterName" TEXT    NOT NULL,
+            "OldValue"      TEXT,
+            "NewValue"      TEXT,
+            "Source"        TEXT    NOT NULL
+        )
+    """);
+    db.Database.ExecuteSqlRaw("""
+        CREATE INDEX IF NOT EXISTS "IX_ParameterLogs_Timestamp"
+        ON "ParameterLogs" ("Timestamp")
+    """);
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
