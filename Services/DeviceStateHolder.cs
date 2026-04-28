@@ -26,4 +26,5 @@ public class DeviceStateHolder
     }
 
     public bool IsDeviceReachable { get; set; } = false;
+    public bool IsSimulationMode  { get; set; } = false;
 }

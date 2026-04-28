@@ -1,3 +1,26 @@
+/* ── Simulation banner ────────────────────────────────────────────────────── */
+.sim-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 9999;
+    background: #854d0e;
+    color: #fef3c7;
+    text-align: center;
+    padding: .45rem 1rem;
+    font-size: .82rem;
+    letter-spacing: .02em;
+}
+
+.sim-banner code {
+    background: rgba(0,0,0,.25);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: monospace;
+}
+
+/* Push the app shell down when the banner is visible */
+.app-shell { margin-top: 32px; }
+
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

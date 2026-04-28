@@ -1,4 +1,12 @@
 @inherits LayoutComponentBase
+@inject DeviceStateHolder StateHolder
+
+@if (StateHolder.IsSimulationMode)
+{
+    <div class="sim-banner">
+        &#9888; Simulation Mode — no real ESP32 is required. Set <code>Esp32:SimulationMode: false</code> in appsettings to connect a real device.
+    </div>
+}
 
 <div class="app-shell">
     <nav class="sidebar">

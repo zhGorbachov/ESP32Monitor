@@ -1,6 +1,5 @@
 using ESP32Monitor.Data;
 using ESP32Monitor.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace ESP32Monitor.Services;
 
@@ -13,17 +12,37 @@ public class PollingService(
 {
     private readonly TimeSpan _interval = TimeSpan.FromMilliseconds(
         configuration.GetValue<int>("Esp32:PollingIntervalMs", 5000));
+    private readonly bool _simulation =
+        configuration.GetValue<bool>("Esp32:SimulationMode", false);
+
+    // Simulation state
+    private static readonly string[] SimEffects =
+        ["rainbow", "fill_rainbow", "static", "snake", "waiting", "breathe_green", "blink_red"];
+    private static readonly string[] SimSsids = ["HomeWiFi", "OfficeNet", "ESP32-AP"];
+    private readonly Random _rng = new();
+    private int _simTick;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("PollingService started. Interval: {Interval}ms", _interval.TotalMilliseconds);
+        stateHolder.IsSimulationMode = _simulation;
+
+        if (_simulation)
+            logger.LogWarning("PollingService running in SIMULATION MODE — no real ESP32 required.");
+        else
+            logger.LogInformation("PollingService started. Interval: {Interval}ms", _interval.TotalMilliseconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await PollOnceAsync(stoppingToken);
+            if (_simulation)
+                await SimulateOnceAsync(stoppingToken);
+            else
+                await PollOnceAsync(stoppingToken);
+
             await Task.Delay(_interval, stoppingToken).ConfigureAwait(false);
         }
     }
+
+    // ── Real polling ──────────────────────────────────────────────────────────
 
     private async Task PollOnceAsync(CancellationToken ct)
     {
@@ -36,12 +55,44 @@ public class PollingService(
         }
 
         stateHolder.IsDeviceReachable = true;
-        var previous = stateHolder.GetStatus();
-        stateHolder.SetStatus(newStatus);
+        await ApplyAndLogAsync(stateHolder.GetStatus(), newStatus, ct);
+    }
 
-        var changes = DetectChanges(previous, newStatus);
-        if (changes.Count == 0)
-            return;
+    // ── Simulation ────────────────────────────────────────────────────────────
+
+    private async Task SimulateOnceAsync(CancellationToken ct)
+    {
+        stateHolder.IsDeviceReachable = true;
+        _simTick++;
+
+        var prev = stateHolder.GetStatus();
+
+        // Simulate gradual, believable state changes
+        var next = new DeviceStatus
+        {
+            WifiConnected = _simTick > 2,                          // offline for first 2 ticks
+            Ssid          = _simTick > 2 ? SimSsids[0] : "",
+            Ip            = _simTick > 2 ? "192.168.1.55" : "",
+            Internet      = _simTick > 4 && (_simTick % 7 != 0),  // brief outage every 7th tick
+            Effect        = prev.Effect == string.Empty
+                                ? "waiting"
+                                : (_simTick % 20 == 0              // change effect every 20 ticks
+                                    ? SimEffects[_rng.Next(SimEffects.Length)]
+                                    : prev.Effect),
+            LastUpdated   = DateTime.UtcNow
+        };
+
+        await ApplyAndLogAsync(prev, next, ct);
+    }
+
+    // ── Shared: diff + persist ────────────────────────────────────────────────
+
+    private async Task ApplyAndLogAsync(DeviceStatus prev, DeviceStatus next, CancellationToken ct)
+    {
+        stateHolder.SetStatus(next);
+
+        var changes = DetectChanges(prev, next);
+        if (changes.Count == 0) return;
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -49,13 +100,14 @@ public class PollingService(
         await db.SaveChangesAsync(ct);
 
         foreach (var c in changes)
-            logger.LogInformation("[Poll] {Param}: {Old} → {New}", c.ParameterName, c.OldValue, c.NewValue);
+            logger.LogInformation("[{Mode}] {Param}: {Old} → {New}",
+                _simulation ? "SIM" : "Poll", c.ParameterName, c.OldValue, c.NewValue);
     }
 
     private static List<ParameterLog> DetectChanges(DeviceStatus prev, DeviceStatus next)
     {
         var logs = new List<ParameterLog>();
-        var now = DateTime.UtcNow;
+        var now  = DateTime.UtcNow;
 
         Check("wifi_connected", prev.WifiConnected.ToString(), next.WifiConnected.ToString());
         Check("internet",       prev.Internet.ToString(),      next.Internet.ToString());
