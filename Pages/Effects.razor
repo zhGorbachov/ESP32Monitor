@@ -1,0 +1,162 @@
+@page "/effects"
+@layout MainLayout
+@inject IHttpClientFactory HttpFactory
+@inject DeviceStateHolder StateHolder
+
+<PageTitle>Effects — ESP32 Monitor</PageTitle>
+
+<div class="effects-page">
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-error" : "alert-success")">
+            @_message
+        </div>
+    }
+
+    <section class="card effect-card">
+        <h2>LED Effects</h2>
+        <p class="current-effect">Currently active: <strong>@StateHolder.GetStatus().Effect</strong></p>
+
+        <div class="effects-grid">
+            @foreach (var e in _effects)
+            {
+                <button class="btn effect-btn @(e.Id == _selectedEffect ? "btn-active" : "")"
+                        @onclick="() => SelectEffect(e.Id)">
+                    <span class="effect-icon">@e.Icon</span>
+                    @e.Label
+                </button>
+            }
+        </div>
+
+        @if (_selectedEffect == "static")
+        {
+            <div class="color-row">
+                <label>Static Color:</label>
+                <input type="color" @bind="_staticColor" />
+                <span class="color-hex">@_staticColor</span>
+            </div>
+        }
+
+        @if (_selectedEffect == "snake")
+        {
+            <div class="color-row">
+                <label>Snake Color:</label>
+                <input type="color" @bind="_snakeColor" />
+                <span class="color-hex">@_snakeColor</span>
+            </div>
+        }
+
+        <div class="action-row">
+            <button class="btn btn-primary" @onclick="ApplyEffectAsync" disabled="@_busy">
+                @if (_busy) { <span class="spinner"></span> } Apply Effect
+            </button>
+        </div>
+    </section>
+
+    <section class="card control-card">
+        <h2>Device Control</h2>
+        <div class="control-row">
+            <button class="btn btn-warning" @onclick="ReturnToMonitoringAsync" disabled="@_busy">
+                Return to Monitoring
+            </button>
+            <button class="btn btn-danger" @onclick="() => _showResetConfirm = true" disabled="@_busy">
+                Factory Reset
+            </button>
+        </div>
+
+        @if (_showResetConfirm)
+        {
+            <div class="confirm-box">
+                <p>Are you sure? This will erase WiFi credentials and restart the device.</p>
+                <button class="btn btn-danger" @onclick="FactoryResetAsync">Yes, Reset</button>
+                <button class="btn" @onclick="() => _showResetConfirm = false">Cancel</button>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private record EffectOption(string Id, string Label, string Icon);
+
+    private readonly List<EffectOption> _effects =
+    [
+        new("rainbow",      "Rainbow (HSV)",   "🌈"),
+        new("fill_rainbow", "Rainbow (Fill)",  "🎨"),
+        new("static",       "Static Color",    "💡"),
+        new("snake",        "Snake",           "🐍"),
+        new("waiting",      "Waiting",         "⏳"),
+        new("breathe_green","Breathe Green",   "🟢"),
+        new("blink_red",    "Blink Red",       "🔴"),
+    ];
+
+    private string _selectedEffect = "rainbow";
+    private string _staticColor    = "#00FF00";
+    private string _snakeColor     = "#FF0000";
+    private bool   _busy;
+    private bool   _showResetConfirm;
+    private string _message  = string.Empty;
+    private bool   _isError;
+
+    private void SelectEffect(string id)
+    {
+        _selectedEffect = id;
+        _message        = string.Empty;
+    }
+
+    private HttpClient CreateClient() => HttpFactory.CreateClient("self");
+
+    private async Task ApplyEffectAsync()
+    {
+        _busy = true;
+        try
+        {
+            var payload = new
+            {
+                effect     = _selectedEffect,
+                color      = _selectedEffect == "static" ? _staticColor : (string?)null,
+                snakeColor = _selectedEffect == "snake"  ? _snakeColor  : (string?)null
+            };
+            var response = await CreateClient().PostAsJsonAsync("/api/effect", payload);
+            await ShowMessageAsync(response, "Effect applied successfully.");
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ReturnToMonitoringAsync()
+    {
+        _busy = true;
+        try
+        {
+            var response = await CreateClient().PostAsync("/api/effect/monitoring", null);
+            await ShowMessageAsync(response, "Returned to monitoring mode.");
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task FactoryResetAsync()
+    {
+        _showResetConfirm = false;
+        _busy = true;
+        try
+        {
+            var response = await CreateClient().PostAsync("/api/effect/reset", null);
+            await ShowMessageAsync(response, "Factory reset initiated. Device is restarting.");
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ShowMessageAsync(HttpResponseMessage response, string successText)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            _message = successText;
+            _isError = false;
+        }
+        else
+        {
+            _message = $"Error {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}";
+            _isError = true;
+        }
+    }
+}

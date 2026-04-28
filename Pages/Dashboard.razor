@@ -1,0 +1,174 @@
+@page "/"
+@layout MainLayout
+@using Microsoft.EntityFrameworkCore
+@inject DeviceStateHolder StateHolder
+@inject AppDbContext Db
+@implements IDisposable
+
+<PageTitle>Dashboard — ESP32 Monitor</PageTitle>
+
+<div class="dashboard">
+
+    <!-- Status Cards -->
+    <section class="status-grid">
+        <div class="card status-card @(IsReachable ? "card-ok" : "card-error")">
+            <div class="card-label">Device</div>
+            <div class="card-value">@(IsReachable ? "Online" : "Offline")</div>
+        </div>
+        <div class="card status-card @(Status.WifiConnected ? "card-ok" : "card-error")">
+            <div class="card-label">WiFi</div>
+            <div class="card-value">@(Status.WifiConnected ? "Connected" : "Disconnected")</div>
+        </div>
+        <div class="card status-card @(Status.Internet ? "card-ok" : "card-warn")">
+            <div class="card-label">Internet</div>
+            <div class="card-value">@(Status.Internet ? "Available" : "Unavailable")</div>
+        </div>
+        <div class="card status-card card-info">
+            <div class="card-label">SSID</div>
+            <div class="card-value">@(string.IsNullOrEmpty(Status.Ssid) ? "—" : Status.Ssid)</div>
+        </div>
+        <div class="card status-card card-info">
+            <div class="card-label">IP Address</div>
+            <div class="card-value">@(string.IsNullOrEmpty(Status.Ip) ? "—" : Status.Ip)</div>
+        </div>
+        <div class="card status-card card-info">
+            <div class="card-label">Active Effect</div>
+            <div class="card-value effect-badge">@Status.Effect</div>
+        </div>
+    </section>
+
+    <div class="refresh-hint">
+        Last updated: @Status.LastUpdated.ToLocalTime().ToString("HH:mm:ss") &nbsp;|&nbsp;
+        Auto-refresh every 5 s
+    </div>
+
+    <!-- Log Table -->
+    <section class="log-section">
+        <div class="log-header">
+            <h2>Parameter Change Log</h2>
+            <div class="log-filters">
+                <select @bind="FilterParameter" @bind:after="LoadLogsAsync">
+                    <option value="">All parameters</option>
+                    <option value="internet">internet</option>
+                    <option value="wifi_connected">wifi_connected</option>
+                    <option value="effect">effect</option>
+                    <option value="ssid">ssid</option>
+                    <option value="ip">ip</option>
+                    <option value="static_color">static_color</option>
+                    <option value="snake_color">snake_color</option>
+                    <option value="device_mode">device_mode</option>
+                </select>
+                <select @bind="FilterSource" @bind:after="LoadLogsAsync">
+                    <option value="">All sources</option>
+                    <option value="auto">auto</option>
+                    <option value="user">user</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_logs == null)
+        {
+            <p class="loading">Loading logs…</p>
+        }
+        else if (_logs.Count == 0)
+        {
+            <p class="empty">No log entries yet.</p>
+        }
+        else
+        {
+            <div class="table-wrapper">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp (local)</th>
+                            <th>Parameter</th>
+                            <th>Old Value</th>
+                            <th>New Value</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in _logs)
+                        {
+                            <tr>
+                                <td class="ts">@log.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td><span class="param-badge">@log.ParameterName</span></td>
+                                <td class="old-val">@(log.OldValue ?? "—")</td>
+                                <td class="new-val">@(log.NewValue ?? "—")</td>
+                                <td><span class="source-badge source-@log.Source">@log.Source</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination">
+                <button class="btn btn-sm" disabled="@(_currentPage <= 1)" @onclick="PrevPage">&#8592; Prev</button>
+                <span>Page @_currentPage of @_totalPages</span>
+                <button class="btn btn-sm" disabled="@(_currentPage >= _totalPages)" @onclick="NextPage">Next &#8594;</button>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private DeviceStatus Status = new();
+    private bool IsReachable;
+    private List<ParameterLog>? _logs;
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private const int PageSize = 20;
+
+    private string FilterParameter { get; set; } = string.Empty;
+    private string FilterSource    { get; set; } = string.Empty;
+
+    private System.Timers.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        RefreshStatus();
+        await LoadLogsAsync();
+
+        _timer = new System.Timers.Timer(5_000);
+        _timer.Elapsed += async (_, _) =>
+        {
+            RefreshStatus();
+            await LoadLogsAsync();
+            await InvokeAsync(StateHasChanged);
+        };
+        _timer.Start();
+    }
+
+    private void RefreshStatus()
+    {
+        Status      = StateHolder.GetStatus();
+        IsReachable = StateHolder.IsDeviceReachable;
+    }
+
+    private async Task LoadLogsAsync()
+    {
+        var query = Db.ParameterLogs.AsNoTracking();
+
+        if (!string.IsNullOrEmpty(FilterParameter))
+            query = query.Where(l => l.ParameterName == FilterParameter);
+
+        if (!string.IsNullOrEmpty(FilterSource))
+            query = query.Where(l => l.Source == FilterSource);
+
+        var total = await query.CountAsync();
+        _totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+        if (_currentPage > _totalPages) _currentPage = _totalPages;
+
+        _logs = await query
+            .OrderByDescending(l => l.Timestamp)
+            .Skip((_currentPage - 1) * PageSize)
+            .Take(PageSize)
+            .ToListAsync();
+    }
+
+    private async Task PrevPage() { _currentPage--; await LoadLogsAsync(); }
+    private async Task NextPage() { _currentPage++; await LoadLogsAsync(); }
+
+    public void Dispose() => _timer?.Dispose();
+}
