@@ -42,11 +42,11 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// ── Auto-migrate on startup ───────────────────────────────────────────────────
+// ── Create database on startup ────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    db.Database.EnsureCreated();
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
