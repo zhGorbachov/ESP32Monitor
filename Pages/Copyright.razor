@@ -1,0 +1,63 @@
+@page "/copyright"
+@layout MainLayout
+@inject NavigationManager Nav
+
+<PageTitle>Авторське право — ESP32 Monitor</PageTitle>
+
+<div class="browser-window">
+    <div class="browser-chrome">
+        <div class="browser-traffic">
+            <span class="dot dot-close"></span>
+            <span class="dot dot-min"></span>
+            <span class="dot dot-max"></span>
+        </div>
+        <div class="browser-tab-row">
+            <div class="browser-tab active">
+                <span class="tab-icon">&#128196;</span>
+                <span class="tab-text">Авторське право</span>
+                <span class="tab-close" title="Закрити" role="button" tabindex="0" @onclick="GoHome">&#10005;</span>
+            </div>
+        </div>
+        <div class="browser-urlbar">
+            <span class="url-lock">&#128274;</span>
+            <span class="url-text">about:diploma</span>
+        </div>
+    </div>
+
+    <div class="browser-content">
+        <div class="win-dialog">
+            <header class="win-dialog-titlebar">
+                <span class="win-dialog-title">Авторське право</span>
+                <button type="button" class="win-dialog-close" title="Закрити" aria-label="Закрити" @onclick="GoHome">&#10005;</button>
+            </header>
+            <div class="win-dialog-body">
+                <p class="thesis-line thesis-strong">МІНІСТЕРСТВО ОСВІТИ І НАУКИ УКРАЇНИ</p>
+                <p class="thesis-line thesis-strong">Центральноукраїнський національний технічний університет</p>
+                <p class="thesis-line">Кафедра кібербезпеки та програмного забезпечення</p>
+                <p class="thesis-spacer"></p>
+                <p class="thesis-line thesis-strong">ВИПУСКНА КВАЛІФІКАЦІЙНА РОБОТА</p>
+                <p class="thesis-line">за першим (бакалаврським) рівнем вищої освіти</p>
+                <p class="thesis-spacer"></p>
+                <p class="thesis-line thesis-topic">
+                    на тему «Програмне забезпечення системи керування моніторинговою інформаційною панеллю
+                    апаратно-програмного комплексу з журналюванням змін робочих параметрів»
+                </p>
+                <p class="thesis-spacer"></p>
+                <p class="thesis-line">ОПП «Комп'ютерна інженерія»</p>
+                <p class="thesis-line">спеціальності 123 «Комп'ютерна інженерія»</p>
+                <p class="thesis-spacer"></p>
+                <p class="thesis-line thesis-strong">Виконав: Горбачов Є.&nbsp;І.</p>
+                <p class="thesis-line thesis-strong">Науковий керівник: Коваленко О.&nbsp;В.</p>
+                <p class="thesis-spacer"></p>
+                <p class="thesis-line thesis-city">Кропивницький — 2026</p>
+            </div>
+            <footer class="win-dialog-footer">
+                <button type="button" class="btn-win-ok" @onclick="GoHome">OK</button>
+            </footer>
+        </div>
+    </div>
+</div>
+
+@code {
+    private void GoHome() => Nav.NavigateTo("/");
+}
