@@ -21,7 +21,7 @@
             <div class="card-value">@(Status.WifiConnected ? "Connected" : "Disconnected")</div>
         </div>
         <div class="card status-card @(Status.Internet ? "card-ok" : "card-warn")">
-            <div class="card-label">@(StateHolder.IsSimulationMode ? "Upstream (sim.)" : "Internet")</div>
+            <div class="card-label">@(StateHolder.IsSimulationMode ? "Upstream (sim.)" : "Internet (ESP32)")</div>
             <div class="card-value">@(Status.Internet ? "Available" : "Unavailable")</div>
         </div>
         <div class="card status-card card-info">
@@ -36,6 +36,10 @@
             <div class="card-label">Active Effect</div>
             <div class="card-value effect-badge">@Status.Effect</div>
         </div>
+        <div class="card status-card @(FakeMonitored.IsHealthy ? "card-ok" : "card-error")">
+            <div class="card-label">Health endpoint</div>
+            <div class="card-value">@(FakeMonitored.IsHealthy ? "204 OK" : "503 fault")</div>
+        </div>
         @if (StateHolder.IsSimulationMode)
         {
             <div class="card status-card @(FakeMonitored.IsHealthy ? "card-ok" : "card-error")">
@@ -49,24 +53,37 @@
         }
     </section>
 
-    @if (StateHolder.IsSimulationMode)
-    {
-        <section class="monitored-panel card">
-            <h3 class="monitored-panel-title">Simulated monitored server</h3>
-            <p class="monitored-panel-name">@FakeMonitored.Name</p>
+    <section class="monitored-panel card">
+        <h3 class="monitored-panel-title">Monitored server scenario</h3>
+        <p class="monitored-panel-name">@FakeMonitored.Name</p>
+        <p class="monitored-panel-scenario"><strong>Scenario:</strong> @FakeMonitored.ScenarioDisplay</p>
+        @if (StateHolder.IsSimulationMode)
+        {
             <p class="monitored-panel-desc">
-                Phase alternates between healthy and outage ticks (see <code>MonitoredServerSimulation</code> in appsettings).
-                When <strong>LED mode</strong> is automatic, the strip state follows the same idea as the ESP32 firmware:
-                green pulse when the path is OK, red blink when it is not. Use <strong>Effects</strong> for manual colours, then
-                <strong>Return to Monitoring</strong> to resume auto green/red.
+                Simulation: dashboard upstream and LED colours follow this scenario. Decorative effects: use <strong>Effects</strong>, then <strong>Return to Monitoring</strong> for auto green/red.
             </p>
+        }
+        else
+        {
+            <p class="monitored-panel-desc">
+                The ESP32 decides green/red LEDs from its own HTTP check. To drive the strip from this scenario, change the firmware URL to
+                <code>http://&lt;PC_LAN_IP&gt;:&lt;port&gt;/api/monitored-service/health</code>
+                (same WiFi as the board). The firmware already treats HTTP <strong>204</strong> as OK and anything else as failure — same as Google <code>generate_204</code>.
+            </p>
+        }
+        @if (FakeMonitored.IsIntermittent)
+        {
             <p class="monitored-panel-meta">
                 Phase: <strong>@(FakeMonitored.Phase == MonitoredPhase.Healthy ? "Healthy" : "Outage")</strong>
                 &nbsp;|&nbsp; Last transition: @FakeMonitored.LastTransitionUtc.ToLocalTime().ToString("HH:mm:ss")
-                &nbsp;|&nbsp; Health check: <code>/api/monitored-service/health</code> (204 / 503)
+                &nbsp;|&nbsp; Tick params: <code>MonitoredServer:Intermittent:*</code>
             </p>
-        </section>
-    }
+        }
+        <p class="monitored-panel-meta">
+            Health check: <code>GET /api/monitored-service/health</code> — <strong>204</strong> healthy, <strong>503</strong> fault.
+            Set <code>MonitoredServer:Scenario</code> before start: <code>AlwaysHealthy</code>, <code>EthernetLost</code>, or <code>Intermittent</code>.
+        </p>
+    </section>
 
     <div class="refresh-hint">
         Last updated: @Status.LastUpdated.ToLocalTime().ToString("HH:mm:ss") &nbsp;|&nbsp;

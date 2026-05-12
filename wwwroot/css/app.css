@@ -401,9 +401,9 @@ a { color: var(--color-primary); text-decoration: none; }
     color: var(--color-text);
 }
 
-.monitored-panel-name {
-    font-weight: 700;
-    color: var(--color-primary);
+.monitored-panel-scenario {
+    font-size: .88rem;
+    color: var(--color-text);
     margin-bottom: .5rem;
 }
 

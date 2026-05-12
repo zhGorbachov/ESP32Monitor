@@ -26,16 +26,36 @@ SQLite  (esp32monitor.db)
 
 ---
 
-## Simulation mode and fake monitored server
+## Monitored health endpoint (scenario before start)
 
-When **`Esp32:SimulationMode`** is `true` (default in `appsettings.Development.json`), the app does not call a real ESP32. Instead:
+The app exposes **`GET /api/monitored-service/health`**: returns **204** when the monitored path is considered healthy, **503** otherwise (same convention as the ESP32 project’s Google `generate_204` check).
 
-1. **`FakeMonitoredServerService`** alternates a simulated upstream path between **Healthy** and **Outage** using tick counts from **`MonitoredServerSimulation`** in appsettings (`HealthyDurationTicks`, `OutageMinTicks`, `OutageMaxTicks`).
-2. The dashboard **`Internet` / "Upstream (sim.)"`** field and logs follow that health (same as a monitored link going up/down).
-3. With **automatic LED monitoring** (default), the in-memory **effect** matches the ESP32 firmware idea: **`breathe_green`** when healthy, **`blink_red`** during outage. Choosing a decorative effect on the Effects page switches to **manual** mode until you use **Return to Monitoring** (or pick `breathe_green` / `blink_red` / `monitoring` again).
-4. **`GET /api/monitored-service/health`** returns **204** when the simulated path is healthy and **503** during outage — same state as the poller; useful for demos or, later, pointing the ESP32 HTTP check at your PC.
+Choose behaviour **before each run** with **`MonitoredServer:Scenario`** in `appsettings.json` (or environment variable `MonitoredServer__Scenario`):
 
-With **`SimulationMode: false`**, the fake server is not advanced; real polling uses the ESP32 only. The health endpoint then stays at its initial state unless you extend the project.
+| Scenario value | Behaviour |
+|---|---|
+| `AlwaysHealthy` | Always **204** — uplink OK (default in base `appsettings.json`). |
+| `EthernetLost` | Always **503** — e.g. Ethernet / upstream down. |
+| `Intermittent` | Alternates healthy and outage using **`MonitoredServer:Intermittent`** tick counts (same poll interval as ESP polling). |
+
+Aliases: `Down`, `Trouble`, `Outage` → same as `EthernetLost`; `Flapping` → `Intermittent`.
+
+### Real ESP32 + LED strip
+
+1. Run this app on your PC (note the URL and port from `dotnet run`, e.g. `http://192.168.1.10:5000`).
+2. Set **`MonitoredServer:Scenario`** to `EthernetLost`, `AlwaysHealthy`, or `Intermittent`, then start the app.
+3. On the ESP32, change the internet-check URL in firmware (`checkInternetConnection`) from Google to:
+   `http://<YOUR_PC_LAN_IP>:<PORT>/api/monitored-service/health`
+   The board must use **HTTP** and treat **204** as success (same as current firmware).
+4. The dashboard **Internet (ESP32)** line reflects what the board reports; the **Health endpoint** card reflects the scenario-driven endpoint (what the ESP actually calls once you repoint it).
+
+---
+
+## Simulation mode (`Esp32:SimulationMode`)
+
+When **`Esp32:SimulationMode`** is `true` (default in `appsettings.Development.json`), the app does not call a real ESP32. The dashboard upstream and in-memory LED colours follow **`MonitoredServer`** the same way as with a real board, including **auto green/red** vs manual effects on the Effects page.
+
+When **`SimulationMode` is `false`**, the poller reads the real ESP32 **`/status`**. **`MonitoredServer:Scenario`** still controls **`/api/monitored-service/health`** on every run — set it before starting the app, and point the ESP32 firmware at that URL so the physical strip matches the chosen fault scenario.
 
 ---
 
@@ -61,7 +81,7 @@ ESP32Monitor/
   Services/
     Esp32Client.cs             HTTP wrapper for all ESP32 endpoints
     DeviceStateHolder.cs       thread-safe in-memory cache of last device state
-    FakeMonitoredServerService.cs  simulated upstream (simulation only)
+    FakeMonitoredServerService.cs  MonitoredServer scenarios + /api/monitored-service/health
     PollingService.cs            BackgroundService — polls, diffs, logs
   wwwroot/css/app.css         full dark-theme stylesheet
   App.razor
@@ -114,12 +134,15 @@ Edit `appsettings.json` and set the ESP32's IP under `Esp32:BaseUrl`:
     "PollingIntervalMs": 5000,
     "SimulationMode": false
   },
-  "MonitoredServerSimulation": {
-    "Name": "Simulated DC uplink / Ethernet path",
-    "HealthyDurationTicks": 8,
-    "OutageMinTicks": 2,
-    "OutageMaxTicks": 5,
-    "RandomSeed": null
+  "MonitoredServer": {
+    "Scenario": "EthernetLost",
+    "Name": "Uplink health (for ESP32 connectivity check)",
+    "Intermittent": {
+      "HealthyDurationTicks": 8,
+      "OutageMinTicks": 2,
+      "OutageMaxTicks": 5,
+      "RandomSeed": null
+    }
   },
   "ConnectionStrings": {
     "DefaultConnection": "Data Source=esp32monitor.db"
@@ -128,7 +151,7 @@ Edit `appsettings.json` and set the ESP32's IP under `Esp32:BaseUrl`:
 ```
 
 For local development you can also set the IP in `appsettings.Development.json` to keep
-`appsettings.json` clean.
+`appsettings.json` clean. Set **`MonitoredServer:Scenario`** there as well (`AlwaysHealthy`, `EthernetLost`, `Intermittent`) before `dotnet run`.
 
 ### 4. Run the app
 
@@ -157,7 +180,7 @@ All endpoints are also browseable via Swagger UI at `http://localhost:5000/swagg
 | `POST` | `/api/effect` | Set LED effect — body: `{ "effect": "rainbow", "color": "#FF0000" }` |
 | `POST` | `/api/effect/monitoring` | Return device to automatic monitoring mode |
 | `POST` | `/api/effect/reset` | Trigger factory reset on the ESP32 |
-| `GET` | `/api/monitored-service/health` | **204** if simulated upstream healthy, **503** during outage (same state as dashboard in simulation) |
+| `GET` | `/api/monitored-service/health` | **204** healthy, **503** fault — driven by **`MonitoredServer:Scenario`** (see README); repoint ESP32 check URL here for real LEDs |
 
 ### Available effect values
 
@@ -197,8 +220,9 @@ Tracked parameters:
 
 ### Dashboard (`/`)
 
-- Status cards: Device, WiFi, upstream/Internet, SSID, IP, active effect
-- In **simulation mode**: extra cards for **Monitored object** (Healthy / Outage), **LED mode** (auto green/red vs manual), and a short panel describing the fake server and `/api/monitored-service/health`
+- Status cards: Device, WiFi, **Internet (ESP32)** or **Upstream (sim.)**, SSID, IP, active effect, **Health endpoint** (204/503 from scenario)
+- **Monitored server scenario** panel: chosen `MonitoredServer:Scenario`, intermittent phase line when applicable, ESP32 URL hint when not in simulation
+- In **simulation mode** only: **Monitored object** / **LED mode** cards and synthetic upstream behaviour
 - Auto-refreshes every 5 seconds
 - Filterable log table — filter by parameter name and/or source
 - Pagination (20 entries per page)

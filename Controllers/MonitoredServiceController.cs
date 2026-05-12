@@ -8,8 +8,7 @@ namespace ESP32Monitor.Controllers;
 public class MonitoredServiceController(FakeMonitoredServerService fake) : ControllerBase
 {
     /// <summary>
-    /// Same logical health as the simulated monitored server (simulation mode only advances state).
-    /// Returns 204 when healthy, 503 during simulated outage — useful for curl/demo or future ESP32 URL.
+    /// Returns 204 when healthy, 503 when not — same rules as the ESP32 Google <c>generate_204</c> check.
     /// </summary>
     [HttpGet("health")]
     public IActionResult Health()

@@ -23,12 +23,16 @@ public class PollingService(
             stateHolder.AutoLedMonitoring = true;
 
         if (_simulation)
-            logger.LogWarning("PollingService running in SIMULATION MODE — fake monitored server drives upstream + LED colours.");
+            logger.LogWarning("PollingService: SIMULATION MODE — dashboard upstream + LED colours follow MonitoredServer scenario (no ESP32 HTTP).");
         else
-            logger.LogInformation("PollingService started. Interval: {Interval}ms", _interval.TotalMilliseconds);
+            logger.LogInformation(
+                "PollingService: real ESP32 polling. MonitoredServer scenario={Scenario} drives /api/monitored-service/health only — set ESP32 check URL to your PC for LEDs to match.",
+                fakeMonitoredServer.Scenario);
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            fakeMonitoredServer.Advance();
+
             if (_simulation)
                 await SimulateOnceAsync(stoppingToken);
             else
@@ -55,7 +59,6 @@ public class PollingService(
     private async Task SimulateOnceAsync(CancellationToken ct)
     {
         stateHolder.IsDeviceReachable = true;
-        fakeMonitoredServer.Advance();
 
         var prev = stateHolder.GetStatus();
         var healthy = fakeMonitoredServer.IsHealthy;
