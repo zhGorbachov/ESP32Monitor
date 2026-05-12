@@ -3,6 +3,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject DeviceStateHolder StateHolder
 @inject AppDbContext Db
+@inject FakeMonitoredServerService FakeMonitored
 @implements IDisposable
 
 <PageTitle>Dashboard — ESP32 Monitor</PageTitle>
@@ -20,7 +21,7 @@
             <div class="card-value">@(Status.WifiConnected ? "Connected" : "Disconnected")</div>
         </div>
         <div class="card status-card @(Status.Internet ? "card-ok" : "card-warn")">
-            <div class="card-label">Internet</div>
+            <div class="card-label">@(StateHolder.IsSimulationMode ? "Upstream (sim.)" : "Internet")</div>
             <div class="card-value">@(Status.Internet ? "Available" : "Unavailable")</div>
         </div>
         <div class="card status-card card-info">
@@ -35,7 +36,37 @@
             <div class="card-label">Active Effect</div>
             <div class="card-value effect-badge">@Status.Effect</div>
         </div>
+        @if (StateHolder.IsSimulationMode)
+        {
+            <div class="card status-card @(FakeMonitored.IsHealthy ? "card-ok" : "card-error")">
+                <div class="card-label">Monitored object</div>
+                <div class="card-value">@(FakeMonitored.IsHealthy ? "Healthy" : "Outage")</div>
+            </div>
+            <div class="card status-card card-info">
+                <div class="card-label">LED mode</div>
+                <div class="card-value">@(StateHolder.AutoLedMonitoring ? "Auto (green/red)" : "Manual effect")</div>
+            </div>
+        }
     </section>
+
+    @if (StateHolder.IsSimulationMode)
+    {
+        <section class="monitored-panel card">
+            <h3 class="monitored-panel-title">Simulated monitored server</h3>
+            <p class="monitored-panel-name">@FakeMonitored.Name</p>
+            <p class="monitored-panel-desc">
+                Phase alternates between healthy and outage ticks (see <code>MonitoredServerSimulation</code> in appsettings).
+                When <strong>LED mode</strong> is automatic, the strip state follows the same idea as the ESP32 firmware:
+                green pulse when the path is OK, red blink when it is not. Use <strong>Effects</strong> for manual colours, then
+                <strong>Return to Monitoring</strong> to resume auto green/red.
+            </p>
+            <p class="monitored-panel-meta">
+                Phase: <strong>@(FakeMonitored.Phase == MonitoredPhase.Healthy ? "Healthy" : "Outage")</strong>
+                &nbsp;|&nbsp; Last transition: @FakeMonitored.LastTransitionUtc.ToLocalTime().ToString("HH:mm:ss")
+                &nbsp;|&nbsp; Health check: <code>/api/monitored-service/health</code> (204 / 503)
+            </p>
+        </section>
+    }
 
     <div class="refresh-hint">
         Last updated: @Status.LastUpdated.ToLocalTime().ToString("HH:mm:ss") &nbsp;|&nbsp;

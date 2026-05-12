@@ -26,13 +26,27 @@ SQLite  (esp32monitor.db)
 
 ---
 
+## Simulation mode and fake monitored server
+
+When **`Esp32:SimulationMode`** is `true` (default in `appsettings.Development.json`), the app does not call a real ESP32. Instead:
+
+1. **`FakeMonitoredServerService`** alternates a simulated upstream path between **Healthy** and **Outage** using tick counts from **`MonitoredServerSimulation`** in appsettings (`HealthyDurationTicks`, `OutageMinTicks`, `OutageMaxTicks`).
+2. The dashboard **`Internet` / "Upstream (sim.)"`** field and logs follow that health (same as a monitored link going up/down).
+3. With **automatic LED monitoring** (default), the in-memory **effect** matches the ESP32 firmware idea: **`breathe_green`** when healthy, **`blink_red`** during outage. Choosing a decorative effect on the Effects page switches to **manual** mode until you use **Return to Monitoring** (or pick `breathe_green` / `blink_red` / `monitoring` again).
+4. **`GET /api/monitored-service/health`** returns **204** when the simulated path is healthy and **503** during outage — same state as the poller; useful for demos or, later, pointing the ESP32 HTTP check at your PC.
+
+With **`SimulationMode: false`**, the fake server is not advanced; real polling uses the ESP32 only. The health endpoint then stays at its initial state unless you extend the project.
+
+---
+
 ## Project Structure
 
 ```
 ESP32Monitor/
   Controllers/
-    StatusController.cs      GET /api/status, GET /api/status/logs
-    EffectController.cs      POST /api/effect, /api/effect/reset, /api/effect/monitoring
+    StatusController.cs         GET /api/status, GET /api/status/logs
+    EffectController.cs         POST /api/effect, /api/effect/reset, /api/effect/monitoring
+    MonitoredServiceController.cs  GET /api/monitored-service/health (204 / 503)
   Data/
     AppDbContext.cs           EF Core DbContext
     Migrations/               initial SQLite migration (auto-applied on startup)
@@ -45,9 +59,10 @@ ESP32Monitor/
     MainLayout.razor          dark sidebar layout
     _Host.cshtml              Blazor Server host page
   Services/
-    Esp32Client.cs            HTTP wrapper for all ESP32 endpoints
-    DeviceStateHolder.cs      thread-safe in-memory cache of last device state
-    PollingService.cs         BackgroundService — polls, diffs, logs
+    Esp32Client.cs             HTTP wrapper for all ESP32 endpoints
+    DeviceStateHolder.cs       thread-safe in-memory cache of last device state
+    FakeMonitoredServerService.cs  simulated upstream (simulation only)
+    PollingService.cs            BackgroundService — polls, diffs, logs
   wwwroot/css/app.css         full dark-theme stylesheet
   App.razor
   Program.cs
@@ -96,10 +111,18 @@ Edit `appsettings.json` and set the ESP32's IP under `Esp32:BaseUrl`:
   },
   "Esp32": {
     "BaseUrl": "http://192.168.1.55",
-    "PollingIntervalMs": 5000
+    "PollingIntervalMs": 5000,
+    "SimulationMode": false
+  },
+  "MonitoredServerSimulation": {
+    "Name": "Simulated DC uplink / Ethernet path",
+    "HealthyDurationTicks": 8,
+    "OutageMinTicks": 2,
+    "OutageMaxTicks": 5,
+    "RandomSeed": null
   },
   "ConnectionStrings": {
-    "DefaultConnection": ""
+    "DefaultConnection": "Data Source=esp32monitor.db"
   }
 }
 ```
@@ -134,6 +157,7 @@ All endpoints are also browseable via Swagger UI at `http://localhost:5000/swagg
 | `POST` | `/api/effect` | Set LED effect — body: `{ "effect": "rainbow", "color": "#FF0000" }` |
 | `POST` | `/api/effect/monitoring` | Return device to automatic monitoring mode |
 | `POST` | `/api/effect/reset` | Trigger factory reset on the ESP32 |
+| `GET` | `/api/monitored-service/health` | **204** if simulated upstream healthy, **503** during outage (same state as dashboard in simulation) |
 
 ### Available effect values
 
@@ -159,7 +183,7 @@ Tracked parameters:
 | Parameter | Description |
 |---|---|
 | `wifi_connected` | WiFi connection state changed |
-| `internet` | Internet availability changed |
+| `internet` | Internet / upstream availability changed (in simulation: follows fake monitored server) |
 | `effect` | Active LED effect changed |
 | `ssid` | Connected network name changed |
 | `ip` | Device IP address changed |
@@ -173,7 +197,8 @@ Tracked parameters:
 
 ### Dashboard (`/`)
 
-- Six status cards: Device online/offline, WiFi, Internet, SSID, IP, active effect
+- Status cards: Device, WiFi, upstream/Internet, SSID, IP, active effect
+- In **simulation mode**: extra cards for **Monitored object** (Healthy / Outage), **LED mode** (auto green/red vs manual), and a short panel describing the fake server and `/api/monitored-service/health`
 - Auto-refreshes every 5 seconds
 - Filterable log table — filter by parameter name and/or source
 - Pagination (20 entries per page)

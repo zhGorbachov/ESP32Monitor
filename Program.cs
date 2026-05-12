@@ -34,6 +34,7 @@ builder.Services.AddHttpClient("self", (sp, client) =>
 
 // ── Application services ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<DeviceStateHolder>();
+builder.Services.AddSingleton<FakeMonitoredServerService>();
 builder.Services.AddHostedService<PollingService>();
 
 // ── Swagger (dev) ─────────────────────────────────────────────────────────────

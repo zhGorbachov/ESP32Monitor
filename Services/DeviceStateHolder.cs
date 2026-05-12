@@ -27,4 +27,10 @@ public class DeviceStateHolder
 
     public bool IsDeviceReachable { get; set; } = false;
     public bool IsSimulationMode  { get; set; } = false;
+
+    /// <summary>
+    /// When true, simulation maps monitored-server health to breathe_green / blink_red.
+    /// When false, user chose a decorative effect; poller does not overwrite Effect.
+    /// </summary>
+    public bool AutoLedMonitoring { get; set; } = true;
 }

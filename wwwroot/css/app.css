@@ -389,6 +389,42 @@ a { color: var(--color-primary); text-decoration: none; }
 #blazor-error-ui .reload { color: #fff; font-weight: bold; margin-left: .5rem; }
 #blazor-error-ui .dismiss { cursor: pointer; float: right; }
 
+/* ── Monitored server panel (simulation) ─────────────────────────────────── */
+.monitored-panel {
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.25rem;
+}
+
+.monitored-panel-title {
+    font-size: 1rem;
+    margin-bottom: .5rem;
+    color: var(--color-text);
+}
+
+.monitored-panel-name {
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: .5rem;
+}
+
+.monitored-panel-desc,
+.monitored-panel-meta {
+    font-size: .85rem;
+    color: var(--color-muted);
+    line-height: 1.45;
+    margin-bottom: .5rem;
+}
+
+.monitored-panel-desc code,
+.monitored-panel-meta code {
+    font-size: .78rem;
+    background: rgba(0,0,0,.25);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.monitored-panel-meta { margin-bottom: 0; }
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
     .sidebar { width: 0; overflow: hidden; }

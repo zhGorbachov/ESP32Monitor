@@ -7,6 +7,7 @@ public class PollingService(
     IServiceScopeFactory scopeFactory,
     Esp32Client esp32Client,
     DeviceStateHolder stateHolder,
+    FakeMonitoredServerService fakeMonitoredServer,
     IConfiguration configuration,
     ILogger<PollingService> logger) : BackgroundService
 {
@@ -15,19 +16,14 @@ public class PollingService(
     private readonly bool _simulation =
         configuration.GetValue<bool>("Esp32:SimulationMode", false);
 
-    // Simulation state
-    private static readonly string[] SimEffects =
-        ["rainbow", "fill_rainbow", "static", "snake", "waiting", "breathe_green", "blink_red"];
-    private static readonly string[] SimSsids = ["HomeWiFi", "OfficeNet", "ESP32-AP"];
-    private readonly Random _rng = new();
-    private int _simTick;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         stateHolder.IsSimulationMode = _simulation;
+        if (_simulation)
+            stateHolder.AutoLedMonitoring = true;
 
         if (_simulation)
-            logger.LogWarning("PollingService running in SIMULATION MODE — no real ESP32 required.");
+            logger.LogWarning("PollingService running in SIMULATION MODE — fake monitored server drives upstream + LED colours.");
         else
             logger.LogInformation("PollingService started. Interval: {Interval}ms", _interval.TotalMilliseconds);
 
@@ -41,8 +37,6 @@ public class PollingService(
             await Task.Delay(_interval, stoppingToken).ConfigureAwait(false);
         }
     }
-
-    // ── Real polling ──────────────────────────────────────────────────────────
 
     private async Task PollOnceAsync(CancellationToken ct)
     {
@@ -58,34 +52,30 @@ public class PollingService(
         await ApplyAndLogAsync(stateHolder.GetStatus(), newStatus, ct);
     }
 
-    // ── Simulation ────────────────────────────────────────────────────────────
-
     private async Task SimulateOnceAsync(CancellationToken ct)
     {
         stateHolder.IsDeviceReachable = true;
-        _simTick++;
+        fakeMonitoredServer.Advance();
 
         var prev = stateHolder.GetStatus();
+        var healthy = fakeMonitoredServer.IsHealthy;
 
-        // Simulate gradual, believable state changes
         var next = new DeviceStatus
         {
-            WifiConnected = _simTick > 2,                          // offline for first 2 ticks
-            Ssid          = _simTick > 2 ? SimSsids[0] : "",
-            Ip            = _simTick > 2 ? "192.168.1.55" : "",
-            Internet      = _simTick > 4 && (_simTick % 7 != 0),  // brief outage every 7th tick
-            Effect        = prev.Effect == string.Empty
-                                ? "waiting"
-                                : (_simTick % 20 == 0              // change effect every 20 ticks
-                                    ? SimEffects[_rng.Next(SimEffects.Length)]
-                                    : prev.Effect),
+            WifiConnected = true,
+            Ssid          = "Sim-LAN",
+            Ip            = "192.168.1.55",
+            Internet      = healthy,
             LastUpdated   = DateTime.UtcNow
         };
 
+        if (stateHolder.AutoLedMonitoring)
+            next.Effect = healthy ? "breathe_green" : "blink_red";
+        else
+            next.Effect = prev.Effect;
+
         await ApplyAndLogAsync(prev, next, ct);
     }
-
-    // ── Shared: diff + persist ────────────────────────────────────────────────
 
     private async Task ApplyAndLogAsync(DeviceStatus prev, DeviceStatus next, CancellationToken ct)
     {

@@ -31,6 +31,12 @@ public class EffectController(
         updated.Effect = request.Effect;
         stateHolder.SetStatus(updated);
 
+        stateHolder.AutoLedMonitoring = request.Effect switch
+        {
+            "monitoring" or "breathe_green" or "blink_red" => true,
+            _ => false
+        };
+
         await LogAsync("effect", previous.Effect, request.Effect, "user", ct);
 
         if (!string.IsNullOrEmpty(request.Color))
@@ -73,6 +79,7 @@ public class EffectController(
         var updated = stateHolder.GetStatus();
         updated.Effect = "monitoring";
         stateHolder.SetStatus(updated);
+        stateHolder.AutoLedMonitoring = true;
 
         await LogAsync("effect", previous.Effect, "monitoring", "user", ct);
         var mode = stateHolder.IsSimulationMode ? " (simulation)" : "";
